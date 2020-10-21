@@ -8,6 +8,9 @@
 
   schemas::`diagnostics`readings`system`processes`diskio!(schema_diagnostics;schema_readings,;schema_system;schema_processes;schema_diskio);
 
+  / FIXME: Possible bug in qhttpd, I think we get the trailing \n at the end of the HTTP body
+  p:-1_p;
+
   / Processor for Influx Line Protocol formatted events
   /   e.g. readings,name=truck_40,fleet=North,driver=Rodney,... load_capacity=5000,fuel_capacity=300,... 1451606400000000000
   / TODO: ms/s time resolution (currently must be ns)
