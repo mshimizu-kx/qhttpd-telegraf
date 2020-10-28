@@ -1,0 +1,322 @@
+#!/bin/bash
+
+#export QHOME=/home/mshimizu/q/
+
+ulimit -n 1024000
+
+preflight() {
+  if ! test -f "bin/websocat"; then
+    echo "ERROR: Tool dependencies have not been built on this system. Please install required packages, and then run 'make' in this directory."
+    exit 1
+  fi
+  if !  which websocat >/dev/null 2>&1; then
+    echo "ERROR: Cannot find required tools in the PATH. Please prepend bin/ to your PATH."
+    echo '  e.g.: export PATH=`pwd`/bin:$PATH'
+    exit 1
+  fi
+  if [ $(ulimit -n) -lt 1024000 ]; then
+    echo "You must increase your file descriptors using: ulimit -n 1024000"
+    exit 1
+  fi
+}
+
+preflight
+
+syssetup() {
+  ulimit -n 1024000
+  cpupower frequency-set -g performance
+
+  echo 1 > /proc/sys/net/ipv4/tcp_tw_recycle
+  echo 0 > /proc/sys/kernel/randomize_va_space
+  echo 3000000 > /proc/sys/fs/nr_open
+
+  sysctl -w net.core.somaxconn=1000000
+  sysctl -w net.ipv4.tcp_max_syn_backlog=1000000
+  sysctl -w net.core.netdev_max_backlog=1000000
+  sysctl -w net.ipv4.ip_local_port_range="1024 65535"
+  sysctl -w net.ipv4.tcp_syncookies=0
+  sysctl -w net.ipv4.tcp_tw_reuse=1
+  sysctl -w net.ipv4.tcp_fin_timeout=1
+  sysctl -w net.ipv4.tcp_slow_start_after_idle=0
+
+  pkill irqbalance
+
+  # Default and max rx/tx buffers
+  sysctl -w net.core.rmem_default=52428800
+  sysctl -w net.core.wmem_default=52428800
+  sysctl -w net.core.rmem_default=5000000
+  sysctl -w net.core.wmem_default=5000000
+  sysctl -w net.core.rmem_max=52428800
+  sysctl -w net.core.wmem_max=52428800
+  sysctl -w net.core.rmem_max=5000000
+  sysctl -w net.core.wmem_max=5000000
+
+  # point at which kernel applies memory pressure with regards to tcp sockets
+  sysctl -w net.ipv4.tcp_mem='16777216 16777216 16777216'
+
+  # tcp rx buffers
+  sysctl -w net.ipv4.tcp_rmem='4096 65535 8388608'
+  # tcp tx buffers
+  sysctl -w net.ipv4.tcp_wmem='4096 65535 8388608'
+  sysctl -w net.ipv4.tcp_moderate_rcvbuf="0"
+
+  # Apply to all subsequent connections
+  sysctl -w net.ipv4.route.flush=1
+
+  # egrep -c processor /proc/cpuinfo
+  # echo fff >/proc/irq/default_smp_affinity
+}
+
+qhttpdmonport=4000
+qhttpdmonhostport=":127.0.0.1:4000"
+qhttpdlmonport=3999
+qhttpdlmonhostport=":127.0.0.1:3999"
+
+qhttpdmon () {
+  tmux new-window -n kdb-qhttpd-mon-$qhttpdmonport "QHOME=$QHOME LD_LIBRARY_PATH=`pwd` rlwrap $QHOME/l64/q init-qhttpd-mon.q -c 40 800 -p $qhttpdmonport -name qhttpd-mon-$qhttpdmonport ; echo press enter to exit ; read"
+  tmux last-window
+}
+qhttpdlmon () {
+  tmux new-window -n kdb-qhttpd-lmon-$qhttpdlmonport "QHOME=$QHOME LD_LIBRARY_PATH=`pwd` rlwrap $QHOME/l64/q init-qhttpd-lmon.q -c 40 800 -p $qhttpdlmonport -name qhttpd-lmon-$qhttpdlmonport -mon $qhttpdmonhostport ; echo press enter to exit ; read"
+  tmux last-window
+}
+
+qhttpd () {
+  id=$1
+  shift
+  qhttpdcmd=$*
+  tmux new-window -n $id "ulimit -c 1024000; ulimit -n 1024000 ; QHOME=$QHOME LD_LIBRARY_PATH=`pwd` $qhttpdcmd 2>&1 ; echo press enter to exit ; read"
+  # tmux new-window -n $id "ulimit -c 1024000; ulimit -n 1024000 ; QHOME=$QHOME LD_LIBRARY_PATH=`pwd` $qhttpdcmd 2>&1 | tee $id.log ; echo press enter to exit ; read"
+  # tmux new-window -n kdb-qhttpd-$port "ulimit -c 1024000; ulimit -n 1024000 ; QHOME=$QHOME LD_LIBRARY_PATH=`pwd` numactl --interleave=all --physcpubind=$core gdb -ex run --args ./httpd $core $mtcp_core $bind $ppdbs ; echo press enter to exit ; read"
+  # tmux new-window -n kdb-qhttpd-$core "ulimit -c 1024000; ulimit -n 1024000 ; QHOME=$QHOME LD_LIBRARY_PATH=`pwd` numactl --interleave=all --physcpubind=$core ./httpd $core $mtcp_core $bind $ppdbs | tee qhttpd-$core.log ; echo press enter to exit ; read"
+  tmux last-window
+}
+
+pp () {
+  id=$1
+  shift
+  ppcmd=$*
+  tmux new-window -n $id "ulimit -c 1024000; ulimit -n 1024000 ; QHOME=$QHOME LD_LIBRARY_PATH=`pwd` $ppcmd ; echo press enter to exit ; read"
+  # tmux new-window -n kdb-pp-$port "ulimit -c 0; ulimit -n 1024000 ; QHOME=$QHOME LD_LIBRARY_PATH=`pwd` numactl --interleave=all --physcpubind=$core gdb -ex run --args rlwrap $QHOME/l64/q init-qhttpd.q -U qhttpd.passwd -c 40 800 -e 1 -p $port -s 0 -name qhttpd-$port -lmon $qhttpdlmonhostport -rdb $target ; echo press enter to exit ; read"
+  # tmux new-window -n kdb-pp-$port "ulimit -c 1024000; ulimit -n 1024000 ; QHOME=$QHOME LD_LIBRARY_PATH=`pwd` numactl --interleave=all --physcpubind=$core rlwrap $QHOME/l64/q init-qhttpd.q -e 1 -U qhttpd.passwd -c 40 800 -p $port -s 0 -name qhttpd-$port -mtcp_core $mtcp_core -qhttpds $qhttpds -qhttpdpes $qhttpdpes -lmon $qhttpdlmonhostport -rdb $target"
+  # tmux new-window -n kdb-pp-$port "ulimit -c 1024000; ulimit -n 1024000 ; QHOME=$QHOME LD_LIBRARY_PATH=`pwd` rlwrap $QHOME/l64/q init-qhttpd.q -e 1 -U qhttpd.passwd -c 40 800 -p $port -s 0 -name qhttpd-$port -mtcp_core $mtcp_core -qhttpds $qhttpds -qhttpdpes $qhttpdpes -lmon $qhttpdlmonhostport -rdb $target ; echo press enter to exit ; read"
+  tmux last-window
+}
+
+addn () {
+  component=$1
+  n=$2
+  echo "{\"cmd\":\"add_n\", \"component\":\"${component}\", \"n\":\"${n}\"}" | websocat -1 ws://127.0.0.1:$qhttpdmonport/
+}
+
+updatehandlers () {
+  # ex.) /singtel/customerA      handlers-slash-singtel-slash-customerA.q
+  paste <(ls -1 handlers-* | sed 's/^handlers-//g; s/.q$//g; s/-slash-/\//g; s/slash-/\//g; s/^slash$/\//g;') <(ls -1 handlers-*) | while read -r endpoint file; do
+    updatehandler $endpoint $file
+  done
+}
+
+updatehandler () {
+  endpoint=$1
+  file=$2
+  echo "Updating handler for endpoint=${endpoint} file=${file}"
+  # Escape the Q code suitable for embedding into JSON
+  #   https://stackoverflow.com/questions/10053678/escaping-characters-in-bash-for-json/13466143
+  Q=$(cat $file | egrep -v '^\s+\/')
+  Q=${Q//\\/\\\\} # \ 
+  Q=${Q//\//\\\/} # / 
+  Q=${Q//\"/\\\"} # " 
+  # TODO: Find a better way to represent the ctrl-chars. If you cat this file, the following control characters will mess up your console! Use 'reset' to recover.
+  Q=${Q///\\t} # \t (tab)
+  Q=${Q///\\\n} # \n (newline)
+  Q=${Q//^M/\\\r} # \r (carriage return)
+  Q=${Q//^L/\\\f} # \f (form feed)
+  Q=${Q//^H/\\\b} # \b (backspace)
+  cmd=$(printf '{"cmd":"set", "endpoint":"%s", "handler":"%s"}' "$endpoint" "$Q")
+  # echo $cmd
+  echo $cmd | websocat -1 ws://127.0.0.1:$qhttpdmonport/ | sed 's/  \[/\n  [/g'
+}
+
+debughandler () {
+  endpoint=$1
+  cmd=$(printf '{"cmd":"debug", "ep":"%s"}' "$endpoint")
+  echo $cmd
+  echo $cmd | websocat -1 ws://127.0.0.1:$qhttpdmonport/ | sed 's/  \[/\n  [/g'
+}
+
+rdb () {
+  core=$1
+  port=$2
+  tmux new-window -n kdb-rdb-$port "QHOME=$QHOME LD_LIBRARY_PATH=`pwd` numactl --interleave=all --physcpubind=$core rlwrap $QHOME/l64/q init-rdb.q -c 40 800 -p $port -s 56 ; echo press enter to exit ; read"
+  tmux last-window
+}
+
+rdbs () {
+  rdb 0-1 5010
+#  rdb 1 5001 
+#   rdb 3 5002 
+#   rdb 5 5003 
+#   rdb 7 5004 
+#   rdb 9 5005 
+#   rdb 11 5006 
+#   rdb 13 5007 
+#   rdb 15 5008 
+#   rdb 17 5009 
+#  rdb 19 5010 
+#  rdb 21 5011 
+#  rdb 23 5012 
+#  rdb 25 5013 
+#  rdb 27 5014 
+}
+
+start () {
+  echo "start"
+  rdbs
+  sleep 0.5
+  qhttpdmon
+  sleep 0.5
+  qhttpdlmon
+  sleep 0.5
+  updatehandlers
+  # Instruct mon to spawn 5 qhttpds from the deployment plan
+  addn pp 64
+  sleep 0.5
+  addn qhttpd 28
+}
+
+stop () {
+  echo "stop"
+  ps auxw | grep "qhttpd-bin" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+  ps auxw | grep "l64/q init-qhttpd-lmon.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+  ps auxw | grep "l64/q init-qhttpd-mon.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+  ps auxw | grep "l64/q init-qhttpd-pp.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+  ps auxw | grep "l64/q init-rdb.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+}
+
+console () {
+  echo "console"
+  tmux new -d -s kx-fe -n kdb-con0 '/bin/bash'
+  tmux attach -t kx-fe
+}
+
+status () {
+  echo "status"
+  QHOME=$QHOME LD_LIBRARY_PATH=`pwd` rlwrap $QHOME/l64/q init-qhttpd-status.q -c 40 800 -s 1 -qhttpds "$(seq 4001 4014 | paste -sd ' ' -)" -rdbs "$(seq  5001 5014 | paste -sd ' ' -)"
+}
+
+showtest () {
+  test=$1
+  file="go-kx-test-${test}.sh"
+  echo "showing test (${test}) -> ${file}"
+  cat ${file}
+}
+
+runtest () {
+  test=$1
+  echo "running test (${test})"
+  ./go-kx-test-${test}.sh
+}
+showtests () {
+  ls -1 go-kx-test* | sed 's/go-kx-test-//' | sed 's/.sh//'
+}
+
+case "$1" in 
+  start)
+    start
+    ;;
+  stop)
+    case "$2" in
+      qhttpds)
+        ps auxw | grep "l64/q init-qhttpd-pp.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+	;;
+      rdbs)
+        ps auxw | grep "l64/q init-rdb.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+	;;
+      *)
+        ps auxw | grep "l64/q init-qhttpd-lmon.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+        ps auxw | grep "l64/q init-qhttpd-mon.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+        ps auxw | grep "l64/q init-qhttpd-pp.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+        ps auxw | grep "l64/q init-rdb.q" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+        ps auxw | grep "qhttpd-bin" | awk '{ print $2 }' | xargs kill -9 2>/dev/null
+    esac
+    ;;
+  syssetup)
+    syssetup
+    ;;    
+  console)
+    console
+    ;;
+  restart)
+    stop
+    start
+   ;;
+  status)
+    status
+    ;;
+  qhttpds)
+    qhttpds
+    ;;
+  rdbs)
+    rdbs
+    ;;
+  qhttpdmon)
+    qhttpdmon
+    ;;
+  qhttpd)
+    shift
+    qhttpd $*
+    ;;
+  pp)
+    shift
+    pp $*
+    ;;
+  rdb)
+    rdb $2 $3
+    ;;
+  numa)
+    numactl -H
+    ;;
+  addn)
+    addn $2 $3
+    ;;
+  test)
+    runtest $2
+    ;;
+  tests)
+    showtests
+    ;;
+  debug)
+    case "$2" in
+      handler)
+	debughandler $3
+	;;
+      *)
+      echo "Usage: $0 update (handlers)"
+    esac
+    ;;
+  update)
+    case "$2" in
+      handlers)
+	updatehandlers
+	;;
+      *)
+      echo "Usage: $0 update (handlers)"
+    esac
+    ;;
+  show)
+    case "$2" in
+      tests)
+	showtests
+	;;
+      test)
+        showtest $3
+	;;
+      *)
+	echo "Usage: $0 show test <testname>"
+    esac
+    ;;
+  *)
+  echo 'Usage: qhttpd (syssetup|start|stop [qhttpds|rdbs]|debug handler <handler>|update handlers|restart|addn <n>|console|status|qhttpd <core> <port> <rdb>|rdb <core> <port>|numa|test <test>|tests|show tests|show test <test>)'
+esac
+
+exit 0

@@ -1,0 +1,5 @@
+component,lmon,id,cmd
+mon,,qhttpd-mon-4000,"mon 4000"
+lmon,,qhttpd-lmon-3999,"lmon 3999"
+pp,qhttpd-lmon-3999,kdb-qhttpd-pp-4001,"rlwrap $QHOME/l64/q init-qhttpd-pp.q -e 1 -U qhttpd.passwd -c 40 800 -p 4001 -s 0 -name pp-4001 -lmon :127.0.0.1:3999 -rdb :unix://5010"
+qhttpd,qhttpd-lmon-3999,qhttpd-1,"qhttpd-bin -name qhttpd-1 -bind 0.0.0.0:80 -lmon 127.0.0.1:3999 -pps 0.0.0.0:4001"
