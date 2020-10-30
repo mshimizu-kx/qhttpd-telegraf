@@ -1,0 +1,36 @@
+{
+  "diagnostics":{
+    "time":"P",
+    "table":"S",
+    "fleet":"S",
+    "model":"S",
+    "name":"S",
+    "driver":"S",
+    "device_version":"S",
+    "load_capacity":"J",
+    "fuel_capacity":"J",
+    "nominal_fuel_consumption":"I",
+    "fuel_state":"F",
+    "current_load":"J",
+    "status":"J"
+  },
+  "readings":{
+    "time":"P",
+    "table":"S",
+    "name":"S",
+    "fleet":"S",
+    "driver":"S",
+    "model":"S",
+    "device_version":"S",
+    "load_capacity":"S",
+    "fuel_capacity":"J",
+    "nominal_fuel_consumption":"J",
+    "latitude":"F",
+    "longitude":"F",
+    "elevation":"J",
+    "velocity":"J",
+    "heading":"J",
+    "grade":"J",
+    "fuel_consumption":"J"
+  }
+}

@@ -16,7 +16,7 @@
 
     // Extract timestamp and massage into parseable epoch format + rest of the key=values
     timestamp:last splitted;
-    properties:raze "time=",(10#timestamp),".",(-9#timestamp),",table=",splitted[0],",",splitted[1];
+    properties:"time=",(10#timestamp),".",(-9#timestamp),",table=",splitted[0],",",splitted[1];
 
     // Parse key-value
     properties:(enlist[`]!enlist (::)), (!/)"S=*," 0: properties;
