@@ -225,6 +225,7 @@ stop () {
 
 console () {
   echo "console"
+  export PATH=`pwd`/bin:$PATH
   tmux new -d -s kx-fe -n kdb-con0 '/bin/bash'
   tmux attach -t kx-fe
 }

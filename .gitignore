@@ -1,3 +1,4 @@
-qhttpd/handlers-slash-telegraf-slash-influx.q
-qhttpd/schemas-slash-telegraf-slash-influx.json
+qhttpd/handlers-*
+qhttpd/schemas-*
 qhttpd/bin/qhttpd-bin
+qhttpd/init-rdb.q

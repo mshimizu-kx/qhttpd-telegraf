@@ -16,8 +16,10 @@
 /
 * Shared library of JSON parser.
 \
-// qsimdjson:`:qsimdjson_l64 2: (`qsimdjson; 1);
-// qsimdjson:(`:qsimdjson_l64 2: (`qsimdjson; 1))`;
+// qsimdjson_init:((`$":qsimdjson_l64") 2:(`qsimdjson_init;1));
+// qsimdjson:((`$":qsimdjson_l64") 2:(`qsimdjson;3));
+// pqsimdjson:((`$":qsimdjson_l64") 2:(`pqsimdjson;4));
+// qsimdjson_init[];
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 //                       Open Namespace: qhttpd_pp                      //
