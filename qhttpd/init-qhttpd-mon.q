@@ -43,15 +43,6 @@ PROCESS_NAME:`$first COMMANDLINE_ARGUMENTS[`name];
 HANDLERS:1!flip `endpoint`debug`handler!"sb*"$\:();
 
 /
-* Schemas to be used for each data feed (e.g. telegraf)
-* # Keys
-* Endpoints like `$"/telegraf/influx" will be contained.
-* # Values
-* Dictionary of schemas for tables for teh endpoint will be contained.
-\
-SCHEMAS:()!();
-
-/
 * Connections of local monitoring processes
 * # Key Columns
 * - name    | symbol |  : process name of a local monitoring process

@@ -60,15 +60,6 @@ ERROR_PAYLOADS:flip `receive_time`info`error`payload!"p***"$\:();
 HANDLERS:1!flip `endpoint`debug`handler!"sb*"$\:();
 
 /
-* Schemas to be used for each data feed (e.g. telegraf)
-* # Keys
-* Endpoints like `$"/telegraf/influx" will be contained.
-* # Values
-* Dictionary of schemas for tables for teh endpoint will be contained.
-\
-SCHEMAS:()!();
-
-/
 * Command line arguments
 \
 COMMANDLINE_ARGUMENTS:.Q.opt .z.X;
@@ -256,8 +247,16 @@ process:{[]
 //                            System Setting                            //
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
+/
+* @brief
+* Restrict access to specific useername and password.
+* @TODO
+* Remove qhttpd credential
+\
 .z.pw:{[username;password]
+  // For qhttpd
   if[(username = `qhttpd) and password ~ "t3st3r"; :1b];
+  // Others
   up:.[get[`:secret/.eggsand]] each (14 0; 9 1);
   (username ~ `$up 0) and password ~ up 1
  };

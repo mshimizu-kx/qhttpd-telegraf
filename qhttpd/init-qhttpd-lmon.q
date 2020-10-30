@@ -48,15 +48,6 @@ MONITORING_CONNECTION:hopen first COMMANDLINE_ARGUMENTS[`mon];
 HANDLERS:MONITORING_CONNECTION (`.qhttpd_mon.register; PROCESS_NAME; .z.a);
 
 /
-* Schemas to be used for each data feed (e.g. telegraf)
-* # Keys
-* Endpoints like `$"/telegraf/influx" will be contained.
-* # Values
-* Dictionary of schemas for tables for teh endpoint will be contained.
-\
-SCHEMAS:()!();
-
-/
 * Connections of local process plants and qhttpd processes
 * # Key Columns
 * - name    | symbol |  : name of process-plant and qhttpd process
@@ -118,7 +109,6 @@ retrieve_push_bytes:{[] PUSH_BYTES};
 register:{[name;ip]
   `.qhttpd_lmon.CONNECTION upsert `name`ip`handle!(name; ip; .z.w);
   if[name like "pp-*";
-    neg[.z.w](`.qhttpd_pp.schemas_upd; SCHEMAS);
     neg[.z.w](`.qhttpd_pp.handlers_upd; HANDLERS);
   ];
  };
