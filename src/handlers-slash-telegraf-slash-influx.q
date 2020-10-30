@@ -1,17 +1,4 @@
-// test-handlers-slash-telegraf-slash-influx.q
-
-/
-* Test parse function called inside process-plant and extract function called inside RDB.
-\
-
-// Define initial schema
-schemas:.j.k raze read0 `$":schemas-slash-telegraf-slash-influx.json";
-//({[namespace;name;dict] @[`.; name; :;] 1!flip `tag`qtype!(key; {raze value x}) @\: dict}[`.telegraf_influx] .) each  flip (key; value) @\: schemas;
-({[namespace;name;dict] @[`.; `$namespace, "_", string name; :;] first each dict}["telegraf_influx"] .) each  flip (key; value) @\: schemas;
-//@[`.; `.telegraf.influx.SCHEMAS; :; `diagnostics`readings`system`diskio`process!{first each x} each value schemas];
-
-
-parse_influx:{[info_unused_;endpoint;payload]
+{[info_unused_;endpoint;payload]
 
   / FIXME: Possible bug in qhttpd, I think we get the trailing \n at the end of the HTTP body
   payload:-1_payload;
@@ -64,22 +51,7 @@ parse_influx:{[info_unused_;endpoint;payload]
     }[schema];
 
     1 _ (parser/)[properties; propkeys except integerkeys]
-  }[endpoint];
+ }[endpoint];
 
   raze to_dict each "\n" vs payload
- };
-
-influx:read0 `:influx.txt;
-
-payloads:parse_influx[();`$"/telegraf/influx";] each influx;
-
-extract_payloads:{[payload]
-  if[payload ~ (); :()];
-  table:`$"events_",(string payload `table);
-  $[table in tables[];
-    table set get[table] uj flip enlist each `table _ payload;
-    @[`.; table; :; enlist `table _ payload]
-  ]
- };
-
-extract_payloads each payloads;
+ }

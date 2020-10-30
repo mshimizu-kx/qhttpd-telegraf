@@ -48,6 +48,15 @@ MONITORING_CONNECTION:hopen first COMMANDLINE_ARGUMENTS[`mon];
 HANDLERS:MONITORING_CONNECTION (`.qhttpd_mon.register; PROCESS_NAME; .z.a);
 
 /
+* Schemas to be used for each data feed (e.g. telegraf)
+* # Keys
+* Endpoints like `$"/telegraf/influx" will be contained.
+* # Values
+* Dictionary of schemas for tables for teh endpoint will be contained.
+\
+SCHEMAS:()!();
+
+/
 * Connections of local process plants and qhttpd processes
 * # Key Columns
 * - name    | symbol |  : name of process-plant and qhttpd process
@@ -97,7 +106,7 @@ retrieve_push_bytes:{[] PUSH_BYTES};
 
 /
 * @brief
-* Register a process-plant and a qhttod process onto connection pool and propagate request handlers to the process-plant.
+* Register a process-plant and a qhttod process onto connection pool and propagate request handlers and schemas to the process-plant.
 *  Called by process plants and qhttpd process.
 * @param
 * name: process name of the process-plant and qhttpd process
@@ -108,7 +117,10 @@ retrieve_push_bytes:{[] PUSH_BYTES};
 \
 register:{[name;ip]
   `.qhttpd_lmon.CONNECTION upsert `name`ip`handle!(name; ip; .z.w);
-  if[name like "pp-*"; neg[.z.w](`.qhttpd_pp.handlers_upd; HANDLERS)];
+  if[name like "pp-*";
+    neg[.z.w](`.qhttpd_pp.schemas_upd; SCHEMAS);
+    neg[.z.w](`.qhttpd_pp.handlers_upd; HANDLERS);
+  ];
  };
 
 /
@@ -116,7 +128,15 @@ register:{[name;ip]
 * Broadcast update of handlers to process-plants.
 \
 handlers_broadcast:{[]
-  {[h] neg[h] (`.qhttpd_pp.handlers_upd; HANDLERS)} each exec handle from CONNECTION;
+  {[h] neg[h] (`.qhttpd_pp.handlers_upd; HANDLERS) } each exec handle from CONNECTION;
+ };
+
+/
+* @brief
+* Broadcast update of schemas to process-plants.
+\
+schemas_broadcast:{[namespace;newschemas]
+  {[ns;schm;h] neg[h] (`.qhttpd_pp.schemas_upd;  ns; schm) }[namespace; newschemas] each exec handle from CONNECTION;
  };
 
 /
@@ -131,6 +151,20 @@ handlers_upd:{[newhandlers]
   `.qhttpd_lmon.HANDLERS upsert newhandlers;
   // Propagate to process-plants
   handlers_broadcast[];
+ };
+
+/
+* @brief
+* Update schemas with passed ones and then propagate them to process-plants.
+*  Called by the central monitoring process.
+* @param
+* newschemas: Dictionary of schemas
+\
+schemas_upd:{[namespace;newschemas]
+  // Update local schemas
+  ({[namespace;name;dict] @[`.; `$namespace, "_", string name; :; first each dict]}[namespace] .) each  flip (key; value) @\: newschemas;
+  // Propagate to process-plants
+  schemas_broadcast[namespace; newschemas];
  };
 
 /

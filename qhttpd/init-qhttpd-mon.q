@@ -43,6 +43,15 @@ PROCESS_NAME:`$first COMMANDLINE_ARGUMENTS[`name];
 HANDLERS:1!flip `endpoint`debug`handler!"sb*"$\:();
 
 /
+* Schemas to be used for each data feed (e.g. telegraf)
+* # Keys
+* Endpoints like `$"/telegraf/influx" will be contained.
+* # Values
+* Dictionary of schemas for tables for teh endpoint will be contained.
+\
+SCHEMAS:()!();
+
+/
 * Connections of local monitoring processes
 * # Key Columns
 * - name    | symbol |  : process name of a local monitoring process
@@ -193,6 +202,14 @@ handlers_broadcast:{[]
   {[h] neg[h] (`.qhttpd_lmon.handlers_upd; HANDLERS) } each exec handle from LOCAL_MONITORING_CONNECTION;
  };
 
+/
+* @brief
+* Broadcast update of schemas to local monitoring processes.
+\
+schemas_broadcast:{[namespace;newschemas]
+  {[ns;schm;h] neg[h] (`.qhttpd_lmon.schemas_upd; ns; schm) }[namespace; newschemas] each exec handle from LOCAL_MONITORING_CONNECTION;
+ };
+
 
 \d .
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
@@ -234,12 +251,12 @@ handlers_broadcast:{[]
   $[
     // Case: set //----------------------/
     command=`set;
-    // Update handlers, propagate the update to local monitoring processes and send back response
+      // Update handlers, propagate the update to local monitoring processes and send back response
       {[request_]
         .Q.trp[
-          {[request]
+          {[request_]
             // Update handlers
-            `.qhttpd_mon.HANDLERS upsert `endpoint`debug`handler!(`$request `endpoint; 0b; get request `handler); 
+            `.qhttpd_mon.HANDLERS upsert `endpoint`debug`handler!(`$request_ `endpoint; 0b; get request_ `handler); 
             // Propagate handler update to local monitoring processes
             .qhttpd_mon.handlers_broadcast[];
             // Send back response to shell
@@ -250,6 +267,25 @@ handlers_broadcast:{[]
           {[err;stacktrace] neg[.z.w] "{\"response\":\"BAD\",\"because\":\"",err,"\",\"trace\":\"",(ssr[ssr[.Q.sbt stacktrace;"\\";"\\\\"];"\"";"\\\""]),"\"}" }
         ]
       }[request];
+    // Case: set_schema //----------------------/
+    command=`set_schema;
+      // Update schemas, propagate the update to local monitoring processes and send back response
+      {[request_]
+        .Q.trp[
+          {[request_]
+            schemas:.j.k request_ `schema;
+            namespace: request_ `namespace;
+            // ex.) @[`.; `telegral_influx_disk; :; `time`table!"PS"] 
+            ({[namespace;name;dict] @[`.; `$namespace, "_", string name; :; first each dict]}[namespace] .) each  flip (key; value) @\: schemas;
+            .qhttpd_mon.schemas_broadcast[namespace; schemas];
+            neg[.z.w] "{\"response\":\"OK\"}"
+          };
+          request_;
+          {[err;stacktrace]
+            neg[.z.w] "{\"response\":\"BAD\", \"because\":\"", err, "\",\"trace\":\"",(ssr[ssr[.Q.sbt stacktrace;"\\";"\\\\"];"\"";"\\\""]),"\"}"
+          }
+        ]
+      }[request];
     // Case: show //---------------------/
     command=`show;
       // Send back `HANDLERS` table
@@ -257,7 +293,7 @@ handlers_broadcast:{[]
     // Case: debug //--------------------/
     command=`debug;
       {[request_]
-        ep:`$request_ `ep;
+        ep:`$request_ `endpoint;
         // Turn on debug mode
         update debug:1b from `.qhttpd_mon.HANDLERS where endpoint=ep;
         // Send back response to shell

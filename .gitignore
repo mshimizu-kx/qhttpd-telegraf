@@ -1,0 +1,3 @@
+qhttpd/handlers-slash-telegraf-slash-influx.q
+qhttpd/schemas-slash-telegraf-slash-influx.json
+qhttpd/bin/qhttpd-bin

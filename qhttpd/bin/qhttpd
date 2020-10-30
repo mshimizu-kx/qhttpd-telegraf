@@ -111,7 +111,7 @@ addn () {
 
 updatehandlers () {
   # ex.) /singtel/customerA      handlers-slash-singtel-slash-customerA.q
-  paste <(ls -1 handlers-* | sed 's/^handlers-//g; s/.q$//g; s/-slash-/\//g; s/slash-/\//g; s/^slash$/\//g;') <(ls -1 handlers-*) | while read -r endpoint file; do
+  paste <(ls -1 handlers-* | sed 's/^handlers-//g; s/.q$//g; s/^slash-/\//g; s/-slash-/\//g; s/slash/\//g') <(ls -1 handlers-*) | while read -r endpoint file; do
     updatehandler $endpoint $file
   done
 }
@@ -141,6 +141,33 @@ debughandler () {
   endpoint=$1
   cmd=$(printf '{"cmd":"debug", "ep":"%s"}' "$endpoint")
   echo $cmd
+  echo $cmd | websocat -1 ws://127.0.0.1:$qhttpdmonport/ | sed 's/  \[/\n  [/g'
+}
+
+updateschemas () {
+  # ex.) /singtel/customerA      handlers-slash-singtel-slash-customerA.q
+  paste <(ls -1 schemas-* | sed 's/^schemas-//g; s/^slash-//g; s/.json$//g; s/-slash-/_/g') <(ls -1 schemas-*) | while read -r namespace file; do
+    updateschema $namespace $file
+  done
+}
+
+updateschema () {
+  namespace=$1
+  file=$2
+  echo "Updating schema for upstream=${namespace} file=${file}"
+  # Escape the Q code suitable for embedding into JSON
+  #   https://stackoverflow.com/questions/10053678/escaping-characters-in-bash-for-json/13466143
+  Q=$(cat $file | egrep -v '^\s+\/')
+  Q=${Q//\\/\\\\} # \ 
+  Q=${Q//\//\\\/} # / 
+  Q=${Q//\"/\\\"} # " 
+  # TODO: Find a better way to represent the ctrl-chars. If you cat this file, the following control characters will mess up your console! Use 'reset' to recover.
+  Q=${Q///\\t} # \t (tab)
+  Q=${Q///\\\n} # \n (newline)
+  Q=${Q//^M/\\\r} # \r (carriage return)
+  Q=${Q//^L/\\\f} # \f (form feed)
+  Q=${Q//^H/\\\b} # \b (backspace)
+  cmd=$(printf '{"cmd":"set_schema", "namespace":"%s", "schema":"%s"}' "$namespace" "$Q")
   echo $cmd | websocat -1 ws://127.0.0.1:$qhttpdmonport/ | sed 's/  \[/\n  [/g'
 }
 
@@ -177,9 +204,12 @@ start () {
   sleep 0.5
   qhttpdlmon
   sleep 0.5
-  updatehandlers
   # Instruct mon to spawn 5 qhttpds from the deployment plan
   addn pp 64
+  sleep 0.5
+  updateschemas
+  sleep 0.5
+  updatehandlers
   sleep 0.5
   addn qhttpd 28
 }

@@ -58,6 +58,15 @@ ERROR_PAYLOADS:flip `receive_time`info`error`payload!"p***"$\:();
 HANDLERS:1!flip `endpoint`debug`handler!"sb*"$\:();
 
 /
+* Schemas to be used for each data feed (e.g. telegraf)
+* # Keys
+* Endpoints like `$"/telegraf/influx" will be contained.
+* # Values
+* Dictionary of schemas for tables for teh endpoint will be contained.
+\
+SCHEMAS:()!();
+
+/
 * Command line arguments
 \
 COMMANDLINE_ARGUMENTS:.Q.opt .z.X;
@@ -105,7 +114,19 @@ HITS:0;
 * newhandlers: Table of requst handlers with the same form as 'HANDLERS'
 \
 handlers_upd:{[newhandlers]
+  // Update local handlers
   `.qhttpd_pp.HANDLERS upsert newhandlers;
+ };
+
+/
+* @brief
+* Update schemas with passed ones. Called by the local monitoring process.
+* @param
+* newschemas: Dictionary of schemas
+\
+schemas_upd:{[namespace;newschemas]
+  // Update local schemas
+  ({[namespace;name;dict] @[`.; `$namespace, "_", string name; :; first each dict]}[namespace] .) each  flip (key; value) @\: newschemas;
  };
 
 /
@@ -164,7 +185,7 @@ handle:{[info;payload]
         // Non debug mode
         .Q.trp[
           { ([]status:enlist `Ok; error:enlist ""; result:enlist x[0][x[1]; x[2]; x[3]]) }; 
-          (handlerfunc; info; endpoints; payload);
+          (handlerfunc; info; handler `endpoint; payload);
           {[err;stacktrace] ([]status:enlist `Err; error:enlist err,"\n",.Q.sbt stacktrace; result:enlist ()) }
         ];
         // Debug mode (don't process payload)
