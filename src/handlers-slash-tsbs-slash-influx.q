@@ -1,57 +1,57 @@
 {[info_unused_;endpoint;payload]
 
   / FIXME: Possible bug in qhttpd, I think we get the trailing \n at the end of the HTTP body
-  payload:-1_payload;
+  payload:-1 _ payload;
   endpoint:1 _ ssr[string endpoint; "/"; "_"], "_";
 
   // Processor for Influx Line Protocol formatted events
   //   e.g. readings,name=truck_40,fleet=North,driver=Rodney,... load_capacity=5000,fuel_capacity=300,... 1451606400000000000
-  to_dict:{[i;endpoint_;payload_]
+  
+  // Split on spaces, handling quoted spaces gracefully (note: cannot use S=* here)
+  quotes:2 cut where payload="\"";
+  spaces:where payload=" ";
+  spacesnotinquotes:spaces where not any each spaces within/:\: quotes;
+  newline:where payload="\n";
+  splitted:-1 _/: (asc 0, 1+newline, spacesnotinquotes) _ payload, " ";
 
-    // Split on spaces, handling quoted spaces gracefully (note: cannot use S=* here)
-    quotes:2 cut where payload="\"";
-    spaces:where payload=" ";
-    spacesnotinquotes:spaces where not any each spaces within/:\: quotes;
-    splitted:-1 _/: (0,1+spacesnotinquotes) _ payload," ";
+  // Each line is composed of [table,host] [various tags] [timestamp]
+  lines:3 cut splitted;
 
-    // Extract timestamp and massage into parseable epoch format + rest of the key=values
-    timestamp:string splitted[2];
-    properties:"time=", (10#timestamp), ".", (-9#timestamp), ",table=", splitted[0], ",", splitted[1];
-
+  lines:{[line]
+    // Extract timestamp with removing line separator "\n"
+    timestamp:-1 _ last line;
     // Parse key-value
-    properties:(enlist[`]!enlist (::)), (!/) "S=,"0: properties;
-    schema:`$endpoint_, properties `table;
+    .[!] "S=*," 0: "time=", (10#timestamp), ".", (-9#timestamp), ",table=", line[0], ",", line[1]
+  } each lines;
 
-    propkeys:1 _ key properties;
+  // Group by table
+  table_map:lines group lines[::; `table];
+  // Included tables in this chunk of payloads
+  tables_in_data:`$/:endpoint,/: key table_map;
+  // Create a table if a new one is included.
+  @[`.; ; :; `time`table!"PS"] each tables_in_data except system "a";
 
-    // New schema is an empty dictionary
-    if[`NOT_EXIST ~ @[get; schema; {[err] `NOT_EXIST}]; @[`.; schema; :; enlist[`time]!enlist "P"]];
+  // Return list of dictionaries by razing list of tables
+  raze {[table_name;dicts]
+    table:(uj/) enlist each dicts;
+    exist:key schema:get table_name;
+    new:cols[table] except exist;
+    // Parse existing keys
+    typemap:?["J" = types; count[types]#{"J"$-1 _/: x}; @[$] each types:value schema];
+    table:![table; (); 0b; exist!flip (typemap; exist)];
 
-    // Influx Line Protocol represents integers as e.g. 5i - chop the trailing "i" off any values which are integers, and map to "J" by default
-    if[0 < count integerkeys:propkeys inter where get[schema]="J"; properties:@[properties; integerkeys; {"J"$-1 _ x}]];
+    // If there is no new key, return
+    if[0 = count new; :table];
 
-    // Parse the other keys
-    parser:{[schema_; properties_; newkey] 
-      $[("i" = last data) and ("J"$-1 _ data:properties_[newkey])<>0N;
-        // Integer value - trim "i" and set target type long
-        [
-          @[schema_; newkey; :; "J"];
-          properties_[newkey]:"J"$-1 _ data
-        ];
-        // Non integer value - set target type timestamp, float or symbol
-        [
-          if[null targettype:@[schema_; newkey]; 
-            @[schema_; newkey; :; targettype:$[newkey ~ `time; "P"; 0n <> "F"$data; "F"; "S"]]
-          ];
-          properties_[newkey]:targettype$data
-        ]
-      ];
-      properties_
-    }[schema];
+    // Decide type of new keys
+    type_and_map:{
+      (("J"; {"J"$-1 _/: x}); ("F"; $["F"]); ("S"; $["S"])) first where not null ({$["i" = last x; "J"$-1 _ x; (::)]}; $["F"]; $["S"]) @\: first x where not "" ~/: x
+    } each table[new];
+    // Update schema
+    table_name upsert new!type_and_map[::; 0];
 
-    1 _ (parser/)[properties; propkeys except integerkeys]
+    // Parse new keys and return
+    ![table; (); 0b; new!flip (type_and_map[::; 1]; new)]
 
-  }[endpoint];
-
-  raze to_dict each "\n" vs payload
+  } ./: flip (tables_in_data; value table_map)
  }

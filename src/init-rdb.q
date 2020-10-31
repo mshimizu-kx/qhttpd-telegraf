@@ -27,9 +27,9 @@ STATS:flip `batch_id`process_plant`n`processing_start_time`processing_end_time`p
 /
 * Table to store payloads until they are processed.
 * # Columns
-* - batch_id  | GUID |        : Batch ID of processed payload
-* - info      | dictionary |  : Information including path, IP address etc.
-* - payload   | dictionary |  : Payload processed by process-plant
+* - batch_id  | GUID |                : Batch ID of processed payload
+* - info      | dictionary |          : Information including path, IP address etc.
+* - payload   | list of dictionary |  : Payload processed by process-plant
 \
 PAYLOADS:flip `batch_id`info`payload!"g**"$\:();
 
@@ -78,7 +78,7 @@ PAYLOADS:flip `batch_id`info`payload!"g**"$\:();
 * Timer function to update `events_*` tables with stored payloads and delete payloads after processing.
 \
 .z.ts:{
-  .rdb.extract_payloads each PAYLOADS[`payload];
+  .rdb.extract_payloads each raze PAYLOADS[`payload];
   delete from `PAYLOADS;
  };
 
