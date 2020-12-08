@@ -27,9 +27,9 @@ STATS:flip `batch_id`process_plant`n`processing_start_time`processing_end_time`p
 /
 * Table to store payloads until they are processed.
 * # Columns
-* - batch_id  | GUID |                : Batch ID of processed payload
-* - info      | dictionary |          : Information including path, IP address etc.
-* - payload   | list of dictionary |  : Payload processed by process-plant
+* - batch_id  | GUID |                                             : Batch ID of processed payload
+* - info      | dictionary |                                       : Information including path, IP address etc.
+* - payload   | list of tuple of (tabe name; update table data) |  : Payload processed by process-plant
 \
 PAYLOADS:flip `batch_id`info`payload!"g**"$\:();
 
@@ -57,15 +57,15 @@ PAYLOADS:flip `batch_id`info`payload!"g**"$\:();
 * Process payloads stored in `PAYLOADS` table and update `events_*` tables.
 * @param
 * payload: payload passed from upstreamtype
-* - dictionary
+* - tuple of (table name; update table data)
 \
 .rdb.extract_payloads:{[payload]
-  table:`$"events_",(string payload `table);
+  table:`$"events_", string payload 0;
   $[table in tables[];
     // update table with `uj` 
-    table set get[table] uj flip enlist each `table _ payload;
+    table set get[table] uj payload 1;
     // Create a new table with the data
-    [.dbg.t:table; .dbg.x:payload; @[`.; table; :; enlist `table _ payload]]
+    @[`.; table; :; payload 1]
   ]
  };
 

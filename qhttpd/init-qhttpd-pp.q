@@ -60,6 +60,11 @@ ERROR_PAYLOADS:flip `receive_time`info`error`payload!"p***"$\:();
 HANDLERS:1!flip `endpoint`debug`handler!"sb*"$\:();
 
 /
+* List of schema names
+\
+SCHEMAS:`$();
+
+/
 * Command line arguments
 \
 COMMANDLINE_ARGUMENTS:.Q.opt .z.X;
@@ -119,7 +124,14 @@ handlers_upd:{[newhandlers]
 \
 schemas_upd:{[namespace;newschemas]
   // Update local schemas
-  ({[namespace;name;dict] @[`.; `$namespace, "_", string name; :; first each dict]}[namespace] .) each  flip (key; value) @\: newschemas;
+  (
+    {[namespace;name;dict]
+      // Add schema name to `.qhttpd_mon.SCHEMAS` if the name does not exist in the list.
+      if[not (schemaname:`$namespace, "_", string name) in .qhttpd_pp.SCHEMAS; @[`.qhttpd_pp; `SCHEMAS; ,; schemaname]];
+      // Define the schema in global.
+      @[`.; `$namespace, "_", string name; :; first each dict]
+    }[namespace] .
+  ) each  flip (key; value) @\: newschemas;
  };
 
 /
@@ -161,7 +173,7 @@ receive_payload:{[stat;info;payload]
 * @type
 * list of string
 * @return
-* table: contains parse status (`Ok or `Err), error message and parsed result (list of dictionary)
+* table: contains parse status (`Ok or `Err), error message and parsed result which is a list of tuple of (table name; update table data).
 \
 handle:{[info;payload]
   // given enlist "/customer/abc/1234" returns (`$"/customer/abc/1234"; `$"/customer/abc"; `$"/customer"; `$"/")

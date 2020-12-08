@@ -43,6 +43,12 @@ PROCESS_NAME:`$first COMMANDLINE_ARGUMENTS[`name];
 HANDLERS:1!flip `endpoint`debug`handler!"sb*"$\:();
 
 /
+* List of schema names. This list will be updated by `set_schema` command of qhttpd script.
+* ex.) `telagraf_influx_disk`telegraf_influx_cpu
+\
+SCHEMAS:`$();
+
+/
 * Connections of local monitoring processes
 * # Key Columns
 * - name    | symbol |  : process name of a local monitoring process
@@ -267,7 +273,14 @@ schemas_broadcast:{[namespace;newschemas]
             schemas:.j.k request_ `schema;
             namespace: request_ `namespace;
             // ex.) @[`.; `telegral_influx_disk; :; `time`table!"PS"] 
-            ({[namespace;name;dict] @[`.; `$namespace, "_", string name; :; first each dict]}[namespace] .) each  flip (key; value) @\: schemas;
+            (
+              {[namespace;name;dict]
+                // Add schema name to `.qhttpd_mon.SCHEMAS` if the name does not exist in the list.
+                if[not (schemaname:`$namespace, "_", string name) in .qhttpd_mon.SCHEMAS; @[`.qhttpd_mon; `SCHEMAS; ,; schemaname]];
+                // Define the schema in global.
+                @[`.; schemaname; :; first each dict];
+              }[namespace] .
+            ) each flip (key; value) @\: schemas;
             .qhttpd_mon.schemas_broadcast[namespace; schemas];
             neg[.z.w] "{\"response\":\"OK\"}"
           };

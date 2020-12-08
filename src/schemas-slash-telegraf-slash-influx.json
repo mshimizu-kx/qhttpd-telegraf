@@ -38,7 +38,7 @@
     "table":"S",
     "host":"S",
     "uptime":"J",
-    "uptime_format":"S"
+    "uptime_format":"*"
   },
   "diskio":{
     "time":"P",

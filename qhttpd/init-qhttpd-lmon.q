@@ -48,6 +48,12 @@ MONITORING_CONNECTION:hopen first COMMANDLINE_ARGUMENTS[`mon];
 HANDLERS:MONITORING_CONNECTION (`.qhttpd_mon.register; PROCESS_NAME; .z.a);
 
 /
+* List of schema names. This list will be updated by `set_schema` command of qhttpd script.
+* ex.) `telagraf_influx_disk`telegraf_influx_cpu
+\
+SCHEMAS:`$();
+
+/
 * Connections of local process plants and qhttpd processes
 * # Key Columns
 * - name    | symbol |  : name of process-plant and qhttpd process
@@ -152,7 +158,14 @@ handlers_upd:{[newhandlers]
 \
 schemas_upd:{[namespace;newschemas]
   // Update local schemas
-  ({[namespace;name;dict] @[`.; `$namespace, "_", string name; :; first each dict]}[namespace] .) each  flip (key; value) @\: newschemas;
+  (
+    {[namespace;name;dict] 
+      // Add schema name to `.qhttpd_mon.SCHEMAS` if the name does not exist in the list.
+      if[not (schemaname:`$namespace, "_", string name) in .qhttpd_lmon.SCHEMAS; @[`.qhttpd_lmon; `SCHEMAS; ,; schemaname]];
+      // Define the schema in global.
+      @[`.; `$namespace, "_", string name; :; first each dict]
+    }[namespace] .
+  ) each  flip (key; value) @\: newschemas;
   // Propagate to process-plants
   schemas_broadcast[namespace; newschemas];
  };

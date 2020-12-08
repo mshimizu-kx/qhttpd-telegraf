@@ -1,7 +1,8 @@
 {[info_unused_;endpoint;payload]
 
-  / FIXME: Possible bug in qhttpd, I think we get the trailing \n at the end of the HTTP body
+  // Remove trailing \n at the end of the HTTP body
   payload:-1 _ payload;
+  // /telegraf/influx => telegraf_influx_
   endpoint:1 _ ssr[string endpoint; "/"; "_"], "_";
 
   // Processor for Influx Line Protocol formatted events
@@ -19,9 +20,10 @@
 
   lines:{[line]
     // Extract timestamp with removing line separator "\n"
-    timestamp:-1 _ last line;
+    timestamp:last line;
     // Parse key-value
-    .[!] "S=*," 0: "time=", (10#timestamp), ".", (-9#timestamp), ",table=", line[0], ",", line[1]
+    // Note: "\"" is stripped from quoted value. q cannot tell if it was quoted one any more.
+    .[!] "S=*," 0: "time=", (-9 _ timestamp), ".", (-9#timestamp), ",table=", line[0], ",", line[1]
   } each lines;
 
   // Group by table
@@ -29,29 +31,51 @@
   // Included tables in this chunk of payloads
   tables_in_data:`$/:endpoint,/: key table_map;
   // Create a table if a new one is included.
-  @[`.; ; :; `time`table!"PS"] each tables_in_data except system "a";
+  @[`.; ; :; `time`table!"PS"] each tables_in_data except .qhttpd_pp.SCHEMAS;
 
   // Return list of dictionaries by razing list of tables
-  raze {[table_name;dicts]
-    table:(uj/) enlist each dicts;
-    exist:key schema:get table_name;
-    new:cols[table] except exist;
+  {[table_name;dicts]
+    table_data:(uj/) enlist each dicts;
+    // Existing keys included in this data
+    not_new:key[schema:get table_name] inter cols table_data;
+    // New keys included in data
+    new:cols[table_data] except not_new;
     // Parse existing keys
-    typemap:?["J" = types; count[types]#{"J"$-1 _/: x}; @[$] each types:value schema];
-    table:![table; (); 0b; exist!flip (typemap; exist)];
+    
+    //* Map from type indicator to converting function used internally in `handler`.
+    //*  Currently five types are registered:
+    //* - "P": parse [second].[nanosecond]
+    //* - "J": parse [digits]i
+    //* - "S": parse as symbol
+    //* - "F": parse as float
+    //* - "*": parse as string (this handler cannot leave "\")
+    typemap:("PJFS*"!($["P"]; {"J"$-1 _/: x}; $["F"]; $["S"]; ::)) schema not_new;
+    table_data:![table_data; (); 0b; not_new!flip (typemap; not_new)];
 
     // If there is no new key, return
-    if[0 = count new; :table];
+    if[0 = count new; :(exec first table from table_data; delete table from table_data)];
 
     // Decide type of new keys
-    type_and_map:{
-      (("J"; {"J"$-1 _/: x}); ("F"; $["F"]); ("S"; $["S"])) first where not null ({$["i" = last x; "J"$-1 _ x; (::)]}; $["F"]; $["S"]) @\: first x where not "" ~/: x
-    } each table[new];
+    type_and_map:{[coldata]
+      coldata:first coldata where not "" ~/: coldata;
+      $[
+        // case: long
+        (not null["J"$-1 _ coldata]) and "i" = last coldata;
+        ("J"; {"J"$-1 _/: x});
+        // case: float
+        not null "F"$coldata;
+        ("F"; $["F"]);
+        // default (symbol)
+        ("S"; $["S"])
+      ]
+    } each table_data[new];
     // Update schema
     table_name upsert new!type_and_map[::; 0];
 
-    // Parse new keys and return
-    ![table; (); 0b; new!flip (type_and_map[::; 1]; new)]
+    // Parse new keys
+    table_data:![table_data; (); 0b; new!flip (type_and_map[::; 1]; new)];
+    // Return tuple of (table name; table)
+    (exec first table from table_data; delete table from table_data)
 
   } ./: flip (tables_in_data; value table_map)
  }
